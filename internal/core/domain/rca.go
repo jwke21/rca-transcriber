@@ -34,7 +34,7 @@ type RCADocument struct {
 	IncidentID int64
 	Branch     string // RCABranchName(IncidentID)
 	Path       string // RCAFilePath(IncidentID, resolution time)
-	Title      string // PR title and commit subject
+	Title      string // PR title: "docs: incident {IncidentID}", e.g. "docs: incident 4821"
 	Body       string // PR description
 	Content    string // Markdown file contents
 }

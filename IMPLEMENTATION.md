@@ -331,7 +331,7 @@ Implementers must not substitute these choices.
 | Twilio | TwiML built with `encoding/xml`. `github.com/twilio/twilio-go` used **only** for `client.RequestValidator` (signature checks). | No REST calls are needed. Twilio recommends its own library for signature validation. |
 | Speech-to-text | Deepgram live streaming over raw WebSocket, `encoding=mulaw&sample_rate=8000` | Accepts Twilio's 8 kHz mu-law audio directly, so no transcoding. |
 | LLM | Google Gemini via `google.golang.org/genai`, structured JSON output with a response schema | The model extracts facts, and Go code formats them. The template structure is guaranteed by code, not by the prompt. |
-| GitHub | `github.com/google/go-github` (latest major), fine-grained personal access token | Branch, file commit and PR through the REST API. |
+| GitHub | `github.com/google/go-github` (latest major), fine-grained personal access token | Branch, file commit and PR through the REST API. A personal token is fine for the PoC. Production would use a service account instead (see the decisions log). |
 | Env loading | `github.com/joho/godotenv` (load `.env` if present; real env vars win) | Works for `make run` and `go run` alike. |
 | Logging | `log/slog` (text handler, level from `LOG_LEVEL`) | Standard library. |
 | Test assertions | `github.com/stretchr/testify` (`require`, `assert`) | Concise table-driven tests. |
@@ -472,7 +472,7 @@ type RCADocument struct {
 	IncidentID int64
 	Branch     string // RCABranchName(IncidentID)
 	Path       string // RCAFilePath(IncidentID, resolution time)
-	Title      string // PR title and commit subject
+	Title      string // PR title: "docs: incident {IncidentID}", e.g. "docs: incident 4821"
 	Body       string // PR description
 	Content    string // Markdown file contents
 }
@@ -664,7 +664,7 @@ Every service and adapter struct must satisfy its port. Add a compile-time asser
 | `GEMINI_API_KEY` | yes | | |
 | `GEMINI_MODEL` | yes | | e.g. `gemini-2.5-flash` (check Google docs for the current model) |
 | `GITHUB_TOKEN` | yes | | fine-grained PAT: this repo only, Contents + Pull requests read/write |
-| `GITHUB_OWNER` | yes | | |
+| `GITHUB_OWNER` | yes | | the account that owns the repo. For this PoC it's a personal account; see the decisions log |
 | `GITHUB_REPO` | yes | | |
 | `GITHUB_BASE_BRANCH` | no | `main` | |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | — | | read by docker-compose only; the Go server ignores them |
@@ -1229,7 +1229,7 @@ These are pure, deterministic functions with no clock reads:
 - `BuildRCADocument(incident domain.Incident, report domain.RCAReport, resolvedAt time.Time) domain.RCADocument`
   - `Branch`: `domain.RCABranchName(incident.ID)`.
   - `Path`: `domain.RCAFilePath(incident.ID, resolvedAt)`.
-  - `Title` (PR title and commit subject): `RCA: incident {id} - {report.Title}`.
+  - `Title` (PR title): always `docs: incident {id}`, e.g. `docs: incident 4821`. The generated `report.Title` appears only in the Markdown heading, not in the PR title. Commit messages are set by the publisher (§6.3).
   - `Body`: the PR description below.
   - `Content`: `RenderRCAMarkdown(...)`.
 
@@ -1443,6 +1443,8 @@ It translates between Twilio's protocol and the core's driving ports (`CallServi
 | Confirmation key | `#` starts the confirmation, and `1` confirms. Gather uses `#` as its finish key, so pressing `#` again would be unreliable to detect. |
 | Ending the recording | The server closes the media WebSocket, and Twilio continues to the `<Redirect>` after `<Connect>`. No Twilio REST calls. |
 | Branch naming | `incident-{id}`. One branch and one PR per incident, updated if regenerated. |
+| PR title | Always `docs: incident {id}` (e.g. `docs: incident 4821`). The AI-generated title goes only in the RCA file's heading, so PR titles stay predictable and never contain model output. |
+| GitHub identity | `GITHUB_OWNER` is the account that owns the repo, and `GITHUB_TOKEN` is that account's fine-grained PAT. This is acceptable for the PoC. A production version would authenticate as a service account (e.g. a GitHub App or machine user) rather than a human account. |
 | RCA template | Simplified to four fields: Title, Date, Author and Summary. Gemini generates only the title and summary. |
 | RCA Author | Always "RCA Transcriber". No personal data goes into the repo, and the PR reviewer is the human author of record. |
 | Generation failure | No fallback PR. After all retries, the incident is marked `rca_failed`. Calling in with the same number and confirming again retries it. |
@@ -1664,7 +1666,7 @@ docker compose exec postgres psql -U rca -d rca -c \
 | 6 | Press `2`, say one more sentence, press `#` | Recording resumes, then the prompt plays again. The extra sentence is saved. |
 | 7 | Press `1` | You hear the goodbye message, and the call ends within about 2 seconds. |
 | 8 | Check the transcript | The last sentence before the final `#` is present, which shows the flush works. |
-| 9 | Wait up to 2 minutes | The status is `rca_complete`. There's a PR from `incident-9001` adding `incidents/{today UTC}-9001.md` with exactly four fields: Title, Date (today, UTC), Author (`RCA Transcriber`) and Summary. The summary's cause (the pool-size config change), the rollback fix and the follow-up match the script. Nothing is invented. |
+| 9 | Wait up to 2 minutes | The status is `rca_complete`. There's a PR titled `docs: incident 9001` from `incident-9001` adding `incidents/{today UTC}-9001.md` with exactly four fields: Title, Date (today, UTC), Author (`RCA Transcriber`) and Summary. The summary's cause (the pool-size config change), the rollback fix and the follow-up match the script. Nothing is invented. |
 | 10 | Call `9001` again, add a correction, then press `#` and `1` | The **same** PR and file are updated. No second PR is opened. |
 | 11 | Call with `9002`, say a sentence, press `#`, then `1`. As soon as the call ends, kill the server hard (`kill -9 $(pgrep rca-transcriber)`), because Ctrl+C would let the generation finish gracefully. Start it again with `make run`. | Startup recovery finishes the RCA for `9002`, and its PR appears. |
 | 12 | Call from an unseeded number (or temporarily delete your row) | You hear "This phone number is not authorized." |
