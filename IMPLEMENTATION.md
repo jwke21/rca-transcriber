@@ -325,9 +325,9 @@ Implementers must not substitute these choices.
 | Language | Go (toolchain installed on the host) | Strongest language for the time-box. Goroutines and `context` map directly onto per-call WebSockets, streaming and cancellation. |
 | HTTP router | `github.com/gorilla/mux` | Required. |
 | WebSockets (Twilio server side, Deepgram client side) | `github.com/gorilla/websocket` | Same family as mux, and a well-known API. The Deepgram protocol is simple JSON, so no vendor SDK is needed. |
-| Database | PostgreSQL 17 in Docker; `github.com/jackc/pgx/v5` (`pgxpool`) | Required. pgx is the standard high-performance driver. |
+| Database | PostgreSQL 17 in Docker; `github.com/jackc/pgx/v5` (`pgxpool`), pinned to **v5.7.4** | Required. pgx is the standard high-performance driver. Pinned (not latest) so it stays binary-compatible with `pgxmock`; see DB unit tests row. |
 | Migrations | Flyway (`flyway/flyway` container in docker-compose) | Required. Versioned SQL files run on `docker compose up`. |
-| DB unit tests | `github.com/pashagolub/pgxmock` (major version compatible with pgx v5) | Mocks pgx without a live database. |
+| DB unit tests | `github.com/pashagolub/pgxmock/v4`, pinned to **v4.9.0** | Mocks pgx without a live database. v4.9.0 is built against pgx v5.7.4 (its `go.mod` requirement); newer pgx (v5.11.0, `go get`'s default as of WP0) adds a `TypeMap()` method to `pgx.Rows` that pgxmock's mock type doesn't implement, breaking the build. Both modules must stay pinned to these versions together — do not `go get` either one to "latest" without re-checking this compatibility. |
 | Twilio | TwiML built with `encoding/xml`. `github.com/twilio/twilio-go` used **only** for `client.RequestValidator` (signature checks). | No REST calls are needed. Twilio recommends its own library for signature validation. |
 | Speech-to-text | Deepgram live streaming over raw WebSocket, `encoding=mulaw&sample_rate=8000` | Accepts Twilio's 8 kHz mu-law audio directly, so no transcoding. |
 | LLM | Google Gemini via `google.golang.org/genai`, structured JSON output with a response schema | The model extracts facts, and Go code formats them. The template structure is guaranteed by code, not by the prompt. |
@@ -809,7 +809,7 @@ Every WP has the same shape: **Purpose** (read §1 first, then the WP-specific s
 **Build**
 
 1. **Module.** Run `go mod init` with the path from `git remote get-url origin` (for example `github.com/{owner}/{repo}`). If there's no remote, stop and ask for the module path. Replace `MODULE_PATH` in the §5 imports.
-2. **Dependencies.** `go get` every module in §4: `gorilla/mux`, `gorilla/websocket`, `jackc/pgx/v5`, `pashagolub/pgxmock` (the major version compatible with pgx v5), `twilio/twilio-go`, `google.golang.org/genai`, `google/go-github` (latest major), `joho/godotenv` and `stretchr/testify`. Create `internal/tools/tools.go` with `//go:build tools` and a blank import of one package from each module, so `go mod tidy` keeps them while Phase 1 runs. Then run `go mod tidy`.
+2. **Dependencies.** `go get` every module in §4: `gorilla/mux`, `gorilla/websocket`, `jackc/pgx/v5@v5.7.4` (pinned; see §4's DB unit tests row — do not take the latest v5), `pashagolub/pgxmock/v4@v4.9.0` (pinned, matches the pgx pin), `twilio/twilio-go`, `google.golang.org/genai`, `google/go-github` (latest major), `joho/godotenv` and `stretchr/testify`. Create `internal/tools/tools.go` with `//go:build tools` and a blank import of one package from each module, so `go mod tidy` keeps them while Phase 1 runs. Then run `go mod tidy`.
 3. **Root files.** Write `CLAUDE.md` (Appendix A, verbatim), `.env.example` (Appendix B), `Makefile` (Appendix C), `docker-compose.yml` (Appendix D), `.gitignore` (`.env`, `bin/`, `*.out`, `coverage*`) and `incidents/.gitkeep`.
 4. **Migration.** Write `db/migrations/V1__init_schema.sql` exactly as in §3.
 5. **Config.** Implement `internal/config` per §5.4. Keep `Load()` thin: it calls an internal `load(envFilePath string, getenv func(string) (string, bool)) (Config, error)` so tests don't depend on the process environment.
@@ -1450,6 +1450,7 @@ It translates between Twilio's protocol and the core's driving ports (`CallServi
 | Instances | Exactly one server instance. Startup recovery treats every `rca_generating` row as orphaned. |
 | Model names | The `DEEPGRAM_MODEL` and `GEMINI_MODEL` values are examples. Check current names in the providers' docs. |
 | Module path | Taken from the git remote in WP0. |
+| pgx / pgxmock versions | Pinned to `pgx/v5 v5.7.4` and `pgxmock/v4 v4.9.0` instead of latest. `go get`'s default pgx (v5.11.0) adds a `TypeMap()` method to `pgx.Rows` that pgxmock v4.9.0's mock doesn't implement, so the pair doesn't compile at latest. v4.9.0 is itself built against pgx v5.7.4. WP1 and any other WP touching Postgres code must keep both pins; don't `go mod tidy`/upgrade either independently. |
 
 ---
 
