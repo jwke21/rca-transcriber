@@ -92,16 +92,12 @@ func TestGenerate_HappyPath(t *testing.T) {
 		assert.Equal(t, "gemini-2.5-flash", fake.model)
 	})
 
-	// The spec's example omits the marker between 13:41:07 and 13:43:52, but
-	// that gap (2m45s) is over 2 minutes, so the stated rule requires one.
 	t.Run("prompt matches the spec format exactly", func(t *testing.T) {
 		want := "Incident number: 4821\n" +
 			"Resolved at (UTC): 2026-09-27 14:05\n" +
 			"Transcript (UTC, one line per utterance):\n" +
 			"[13:41:07] Paged for elevated 500s on the payments API.\n" +
-			"[--- no narration for 2 min ---]\n" +
 			"[13:43:52] Error logs show connection refused to the ledger database.\n" +
-			"[--- no narration for 11 min ---]\n" +
 			"[13:55:10] Rolled back the ledger deploy from 13:30, errors dropping.\n"
 		assert.Equal(t, want, fake.prompt(t))
 	})
@@ -165,44 +161,20 @@ func TestGenerate_Prompt(t *testing.T) {
 			want:     []string{"[13:01:02] one"},
 		},
 		{
-			name:     "gap of exactly 2 minutes has no marker",
-			incident: domain.Incident{ID: 7},
-			events: []domain.IncidentEvent{
-				{Transcription: "one", CreatedAt: at(10, 0, 0)},
-				{Transcription: "two", CreatedAt: at(10, 2, 0)},
-			},
-			header: "Resolved at (UTC): unknown",
-			want:   []string{"[10:00:00] one", "[10:02:00] two"},
-		},
-		{
-			name:     "gap just over 2 minutes has a marker",
-			incident: domain.Incident{ID: 7},
-			events: []domain.IncidentEvent{
-				{Transcription: "one", CreatedAt: at(10, 0, 0)},
-				{Transcription: "two", CreatedAt: at(10, 2, 1)},
-			},
-			header: "Resolved at (UTC): unknown",
-			want:   []string{"[10:00:00] one", "[--- no narration for 2 min ---]", "[10:02:01] two"},
-		},
-		{
-			name:     "multiple gaps and short gaps in order",
+			name:     "lines far apart in time get no gap marker",
 			incident: domain.Incident{ID: 7},
 			events: []domain.IncidentEvent{
 				{Transcription: "one", CreatedAt: at(10, 0, 0)},
 				{Transcription: "two", CreatedAt: at(10, 0, 30)},
-				{Transcription: "three", CreatedAt: at(10, 45, 30)},
-				{Transcription: "four", CreatedAt: at(10, 46, 0)},
-				{Transcription: "five", CreatedAt: at(12, 0, 0)},
+				{Transcription: "three", CreatedAt: at(10, 11, 30)},
+				{Transcription: "four", CreatedAt: at(12, 0, 0)},
 			},
 			header: "Resolved at (UTC): unknown",
 			want: []string{
 				"[10:00:00] one",
 				"[10:00:30] two",
-				"[--- no narration for 45 min ---]",
-				"[10:45:30] three",
-				"[10:46:00] four",
-				"[--- no narration for 74 min ---]",
-				"[12:00:00] five",
+				"[10:11:30] three",
+				"[12:00:00] four",
 			},
 		},
 		{
@@ -222,7 +194,10 @@ func TestGenerate_Prompt(t *testing.T) {
 			_, err := g.Generate(context.Background(), tc.incident, tc.events)
 			require.NoError(t, err)
 
-			lines := strings.Split(strings.TrimSuffix(fake.prompt(t), "\n"), "\n")
+			prompt := fake.prompt(t)
+			assert.NotContains(t, prompt, "no narration")
+
+			lines := strings.Split(strings.TrimSuffix(prompt, "\n"), "\n")
 			require.Len(t, lines, 3+len(tc.want))
 			assert.Equal(t, "Incident number: 7", lines[0])
 			assert.Equal(t, tc.header, lines[1])

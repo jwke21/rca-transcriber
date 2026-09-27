@@ -977,11 +977,10 @@ Every WP has the same shape: **Purpose** (read §1 first, then the WP-specific s
    Transcript (UTC, one line per utterance):
    [13:41:07] Paged for elevated 500s on the payments API.
    [13:43:52] Error logs show connection refused to the ledger database.
-   [--- no narration for 11 min ---]
    [13:55:10] Rolled back the ledger deploy from 13:30, errors dropping.
    ```
 
-   Insert a gap marker when consecutive events are more than 2 minutes apart.
+   Don't insert gap markers between lines. Each line has its own timestamp, so the model can see pauses without them.
 4. **System instruction** (use this text):
 
    ```
@@ -1015,7 +1014,7 @@ Every WP has the same shape: **Purpose** (read §1 first, then the WP-specific s
 - Happy path:
   - The model name is passed through.
   - The prompt contains every line in order with `HH:MM:SS` timestamps.
-  - A gap marker is inserted only for gaps over 2 minutes.
+  - No gap marker is inserted, even when consecutive lines are far apart.
   - "Resolved at" shows the time, or "unknown" when nil.
   - The system instruction, MIME type and schema are all set.
   - `title` and `summary` map into the domain struct.

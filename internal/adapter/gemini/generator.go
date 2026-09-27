@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
-	"time"
 
 	"google.golang.org/genai"
 
@@ -36,9 +35,6 @@ const (
 	temperature float32 = 0.2
 	// responseMIMEType asks Gemini for structured JSON output.
 	responseMIMEType = "application/json"
-	// gapThreshold is the silence between consecutive utterances above which
-	// the prompt gets a gap marker.
-	gapThreshold = 2 * time.Minute
 )
 
 // Config configures a Generator.
@@ -171,8 +167,8 @@ func responseSchema() *genai.Schema {
 }
 
 // buildPrompt renders the user message: incident number, resolution time and
-// one "[HH:MM:SS] text" line per event in UTC, with a gap marker whenever
-// consecutive events are more than gapThreshold apart.
+// one "[HH:MM:SS] text" line per event in UTC. No gap markers are inserted,
+// because every line already carries its own timestamp.
 func buildPrompt(incident domain.Incident, events []domain.IncidentEvent) string {
 	var b strings.Builder
 
@@ -189,13 +185,7 @@ func buildPrompt(incident domain.Incident, events []domain.IncidentEvent) string
 	b.WriteString("\n")
 
 	b.WriteString("Transcript (UTC, one line per utterance):\n")
-	for i, ev := range events {
-		if i > 0 {
-			gap := ev.CreatedAt.Sub(events[i-1].CreatedAt)
-			if gap > gapThreshold {
-				fmt.Fprintf(&b, "[--- no narration for %d min ---]\n", int(gap/time.Minute))
-			}
-		}
+	for _, ev := range events {
 		fmt.Fprintf(&b, "[%s] %s\n", ev.CreatedAt.UTC().Format("15:04:05"), singleLine(ev.Transcription))
 	}
 
