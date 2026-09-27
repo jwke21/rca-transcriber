@@ -268,8 +268,10 @@ func (s *RCAService) RecoverPending(ctx context.Context) error {
 }
 
 // Shutdown stops accepting new work and waits for in-flight generations. If
-// ctx is done first, it cancels them (they stay recoverable at the next
-// startup) and returns ctx.Err(). It is safe to call more than once.
+// ctx is done first, it cancels them and returns ctx.Err(). A cancelled
+// generation records rca_failed, so it is not recovered at the next startup;
+// the SRE retries by calling in and confirming again. It is safe to call more
+// than once.
 func (s *RCAService) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	s.shuttingDown = true
