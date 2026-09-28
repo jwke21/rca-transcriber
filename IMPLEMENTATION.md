@@ -1219,7 +1219,7 @@ If generation keeps failing, no PR is opened: the incident is marked `rca_failed
    - List `rca_generating` incidents. With a single instance, these are orphans from a previous run, so `SetStatus(rca_pending)` each one.
    - Then list `rca_pending` and `Enqueue` each.
    - Return every error joined together.
-5. **`Shutdown(ctx)`.** Stop accepting new work, then wait for in-flight goroutines. If `ctx` finishes first, cancel the base context (in-flight generations abort and stay recoverable) and return `ctx.Err()`.
+5. **`Shutdown(ctx)`.** Stop accepting new work, then wait for in-flight goroutines. If `ctx` finishes first, cancel the base context and return `ctx.Err()`. Each cancelled generation follows the "every exit path" rule in step 3 and records `rca_failed`, so startup recovery does not pick it up. The SRE retries by calling in with the same incident number and confirming again.
 
 **Build — Markdown (`rca_markdown.go`)**
 
@@ -1399,7 +1399,7 @@ It translates between Twilio's protocol and the core's driving ports (`CallServi
 2. **Health check.** `/healthz` pings the database with a 2-second timeout and returns `200 ok` or `503`. Put it in `cmd/server/health.go` behind a small `pinger` interface so it's testable.
 3. **Shutdown on SIGINT/SIGTERM, in order:**
    1. `server.Shutdown`, 10 seconds (stops new calls; open WebSockets drain as their handlers return).
-   2. `rcaService.Shutdown`, 60 seconds (lets in-flight PRs finish).
+   2. `rcaService.Shutdown`, 60 seconds (lets in-flight PRs finish; any still running after 60 seconds are cancelled and marked `rca_failed`).
    3. `pool.Close()`.
 4. Delete `internal/tools/`, run `go mod tidy`, and confirm `make build` and `make unittest` still pass.
 5. **`README.md`:**
@@ -1448,6 +1448,7 @@ It translates between Twilio's protocol and the core's driving ports (`CallServi
 | RCA template | Simplified to four fields: Title, Date, Author and Summary. Gemini generates only the title and summary. |
 | RCA Author | Always "RCA Transcriber". No personal data goes into the repo, and the PR reviewer is the human author of record. |
 | Generation failure | No fallback PR. After all retries, the incident is marked `rca_failed`. Calling in with the same number and confirming again retries it. |
+| Generation cut short by shutdown | A generation cancelled because the graceful shutdown timed out is marked `rca_failed`, not reset to `rca_pending`, so it isn't recovered at the next startup. Retry it the same way as any failed generation. Startup recovery only covers incidents left in `rca_pending` or `rca_generating`, i.e. a server that was killed without a graceful shutdown. |
 | Instances | Exactly one server instance. Startup recovery treats every `rca_generating` row as orphaned. |
 | Model names | The `DEEPGRAM_MODEL` and `GEMINI_MODEL` values are examples. Check current names in the providers' docs. |
 | Module path | Taken from the git remote in WP0. |
