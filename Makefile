@@ -6,7 +6,7 @@ PORT        ?= 8080
 NGROK_DOMAIN ?=
 DATABASE_URL ?= postgres://rca:rca@localhost:5432/rca?sslmode=disable
 
-.PHONY: unittest format build run ngrok add-engineer
+.PHONY: unittest format build run db ngrok add-engineer
 
 unittest:
 	go test -race -count=1 -cover ./...
@@ -19,6 +19,10 @@ build:
 
 run: build
 	./$(BIN_DIR)/$(BINARY)
+
+# Starts Postgres and applies Flyway migrations.
+db:
+	docker compose up -d
 
 # Tunnels localhost:$(PORT) so Twilio webhooks can reach the local server.
 # Set PUBLIC_BASE_URL in .env to the https URL ngrok prints. A random
