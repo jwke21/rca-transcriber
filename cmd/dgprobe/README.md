@@ -1,12 +1,6 @@
 # dgprobe
 
-A throwaway manual test harness for `internal/adapter/deepgram`. It is not
-part of any work package — delete this directory once you're done testing,
-don't commit it.
-
-`cmd/server` doesn't wire Deepgram into the HTTP server yet (that's WP9), so
-this is the only way to exercise the adapter against the real Deepgram API
-before then.
+A throwaway manual test harness for `internal/adapter/deepgram`.
 
 ## What it does
 

@@ -1,8 +1,6 @@
 # ghprobe
 
-A throwaway manual test harness for `internal/adapter/github`. It is not
-part of any work package — delete this directory once you're done testing,
-don't commit it.
+A manual test harness for `internal/adapter/github`.
 
 ## Read this first
 
