@@ -6,7 +6,7 @@ PORT        ?= 8080
 NGROK_DOMAIN ?=
 DATABASE_URL ?= postgres://rca:rca@localhost:5432/rca?sslmode=disable
 
-.PHONY: unittest format build run db ngrok add-engineer
+.PHONY: unittest format build run db ngrok add-engineer health
 
 unittest:
 	go test -race -count=1 -cover ./...
@@ -39,3 +39,9 @@ add-engineer:
 	@echo '$(PHONE)' | grep -Eq '^\+[1-9][0-9]{1,14}$$' || { echo "PHONE must be E.164, e.g. make add-engineer PHONE=+15555550123" >&2; exit 1; }
 	@echo "INSERT INTO engineers (phone_number) VALUES (:'phone') ON CONFLICT (phone_number) DO NOTHING;" | \
 		psql "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -v phone='$(PHONE)'
+
+# Checks that the running server is up and can reach the database.
+# Exits non-zero if /healthz does not return 2xx.
+health:
+	curl -fsS --max-time 5 http://localhost:$(PORT)/healthz
+	@echo
